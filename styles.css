@@ -1,0 +1,389 @@
+/* ============================================================
+   Yelp — 災後臨時指揮站 (Field Command Station) aesthetic
+   ============================================================ */
+
+:root {
+  --paper: #f1ead8;
+  --paper-2: #e8dfc6;
+  --paper-3: #ddd1b1;
+  --plywood: #c9a96a;
+  --plywood-dark: #8a6a3a;
+  --ink: #1a1814;
+  --ink-soft: #3d3a32;
+  --pencil: #6f6856;
+  --pencil-faint: #a59b80;
+  --marker-red: #c8332c;
+  --marker-red-dark: #8a221c;
+  --highlight: #f0c849;
+  --highlight-dim: #d9b03c;
+  --tape: rgba(244, 216, 110, 0.85);
+  --tape-blue: rgba(160, 196, 222, 0.85);
+  --tape-red: rgba(216, 142, 130, 0.85);
+  --ok: #4a7c45;
+  --warn: #b07b1f;
+  --err: #b42318;
+  --line: rgba(26, 24, 20, 0.18);
+  --line-strong: rgba(26, 24, 20, 0.35);
+
+  --f-hand: "Caveat", "Permanent Marker", "Noto Sans TC", cursive;
+  --f-stamp: "Permanent Marker", "Caveat", system-ui, sans-serif;
+  --f-mono: "Special Elite", "Courier Prime", ui-monospace, "Courier New", monospace;
+  --f-body: "Noto Sans TC", -apple-system, system-ui, sans-serif;
+}
+
+body.cs-dark {
+  --paper: #1c1f1d;
+  --paper-2: #25282a;
+  --paper-3: #2d3033;
+  --ink: #f1ead8;
+  --ink-soft: #cfc7b3;
+  --pencil: #a59b80;
+  --pencil-faint: #6f6856;
+  --line: rgba(241, 234, 216, 0.18);
+  --line-strong: rgba(241, 234, 216, 0.35);
+}
+
+/* ============================================================
+   LOW-LOAD MODE — strip decorative styling for crisis legibility
+   ============================================================ */
+body.cs-lowload {
+  --f-hand: "Noto Sans TC", -apple-system, system-ui, sans-serif;
+  --f-stamp: "Noto Sans TC", -apple-system, system-ui, sans-serif;
+  --f-mono: "Noto Sans TC", -apple-system, system-ui, sans-serif;
+  --paper: #ffffff;
+  --paper-2: #f4f4f2;
+  --paper-3: #e8e8e6;
+  --ink: #1a1814;
+  --ink-soft: #3a3833;
+  --pencil: #6a6862;
+  --line: rgba(0,0,0,0.18);
+  --line-strong: rgba(0,0,0,0.5);
+}
+body.cs-lowload .cs-paper { background-image: none !important; background-color: var(--paper) !important; }
+body.cs-lowload .cs-paper::before { display: none !important; }
+body.cs-lowload .cs-tape { display: none !important; }
+body.cs-lowload .cs-stamp { display: none !important; }
+body.cs-lowload .cs-reg { display: none !important; }
+body.cs-lowload .cs-hand { font-style: normal !important; letter-spacing: 0 !important; }
+body.cs-lowload .cs-mono { letter-spacing: 0 !important; }
+body.cs-lowload .cs-stamp-font { letter-spacing: 0 !important; text-transform: none !important; }
+body.cs-lowload .cs-underline::after { display: none !important; }
+body.cs-lowload .cs-sticker {
+  transform: none !important;
+  box-shadow: none !important;
+  font-family: var(--f-body) !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+  font-size: 12px !important;
+  padding: 2px 8px !important;
+  border-width: 1px !important;
+}
+body.cs-lowload .cs-card { box-shadow: none !important; border-radius: 4px !important; background-image: none !important; }
+body.cs-lowload .cs-card.lined { background-image: none !important; padding-top: 0 !important; }
+body.cs-lowload .cs-board { background: var(--paper) !important; border-color: var(--line-strong) !important; box-shadow: none !important; }
+body.cs-lowload .cs-kraft { background: var(--paper-2) !important; border-color: var(--line-strong) !important; }
+body.cs-lowload .cs-header-bar { display: none !important; }
+body.cs-lowload .cs-btn { box-shadow: none !important; border-radius: 4px !important; }
+body.cs-lowload .cs-btn:active { transform: none !important; }
+body.cs-lowload .cs-check { border-radius: 2px !important; }
+body.cs-lowload .cs-check.checked::after { font-family: var(--f-body) !important; font-weight: 700 !important; }
+body.cs-lowload .cs-sos {
+  background: var(--marker-red) !important;
+  border: 2px solid var(--marker-red-dark) !important;
+  box-shadow: 0 4px 0 var(--marker-red-dark) !important;
+  font-family: var(--f-body) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+}
+body.cs-lowload .cs-sos:active {
+  box-shadow: 0 1px 0 var(--marker-red-dark) !important;
+  transform: translateY(3px) !important;
+}
+body.cs-lowload .cs-sos.active { animation: none !important; }
+
+/* paper bg with grid + grain */
+.cs-paper {
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(rgba(26,24,20,0.04) 1px, transparent 1px),
+    linear-gradient(rgba(26,24,20,0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26,24,20,0.05) 1px, transparent 1px);
+  background-size: 4px 4px, 24px 24px, 24px 24px;
+  background-position: 0 0, 0 0, 0 0;
+  position: relative;
+}
+.cs-paper::before {
+  content: "";
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.1  0 0 0 0 0.09  0 0 0 0 0.08  0 0 0 0.35 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.18'/></svg>");
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* plywood / cardboard panel */
+.cs-board {
+  background:
+    repeating-linear-gradient(92deg, rgba(138,106,58,0.06) 0 2px, transparent 2px 9px),
+    repeating-linear-gradient(0deg, rgba(138,106,58,0.04) 0 1px, transparent 1px 6px),
+    linear-gradient(180deg, #d9c08a, #c9a96a 70%, #b89554);
+  border: 1px solid #8a6a3a;
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.18),
+    inset 0 -8px 18px rgba(80,55,20,0.18),
+    0 1px 0 rgba(255,255,255,0.4);
+}
+
+/* manila folder / kraft */
+.cs-kraft {
+  background:
+    linear-gradient(180deg, #e3c98a, #d6b56a);
+  border: 1px solid #a07f3e;
+}
+
+/* stamped label - rectangular sticker */
+.cs-sticker {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--f-stamp);
+  font-size: 11px; letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px 3px;
+  border: 1.5px solid currentColor;
+  background: var(--paper);
+  position: relative;
+  transform: rotate(-1.2deg);
+  box-shadow: 1px 1.5px 0 rgba(0,0,0,0.12);
+}
+.cs-sticker.st-ok    { color: var(--ok);  background: #e6efd9; }
+.cs-sticker.st-sent  { color: #1b4a82;    background: #d8e6f4; }
+.cs-sticker.st-read  { color: #5a3b8f;    background: #e0d9f0; }
+.cs-sticker.st-warn  { color: var(--warn);background: #f5e4b8; }
+.cs-sticker.st-err   { color: var(--err); background: #f5d9d3; }
+.cs-sticker.st-idle  { color: var(--pencil); background: var(--paper-2); }
+
+/* rubber-stamp circular */
+.cs-stamp {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--f-stamp);
+  border: 2px solid var(--marker-red);
+  color: var(--marker-red);
+  padding: 4px 10px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  transform: rotate(-3deg);
+  opacity: 0.92;
+  background: transparent;
+  position: relative;
+}
+.cs-stamp::after {
+  content: ""; position: absolute; inset: -2px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='40'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 -1 1'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  mix-blend-mode: lighten;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* washi tape strip */
+.cs-tape {
+  position: absolute;
+  width: 64px; height: 18px;
+  background: var(--tape);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  z-index: 2;
+}
+.cs-tape::before, .cs-tape::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 6px;
+  background-image: radial-gradient(circle at 50% 50%, transparent 2.5px, var(--tape) 2.5px);
+  background-size: 6px 6px;
+}
+.cs-tape::before { left: -5px; }
+.cs-tape::after  { right: -5px; transform: scaleX(-1); }
+.cs-tape.tape-blue { background: var(--tape-blue); }
+.cs-tape.tape-blue::before, .cs-tape.tape-blue::after { background-image: radial-gradient(circle at 50% 50%, transparent 2.5px, var(--tape-blue) 2.5px); }
+.cs-tape.tape-red  { background: var(--tape-red); }
+.cs-tape.tape-red::before, .cs-tape.tape-red::after { background-image: radial-gradient(circle at 50% 50%, transparent 2.5px, var(--tape-red) 2.5px); }
+
+/* handwriting */
+.cs-hand { font-family: var(--f-hand); }
+.cs-mono { font-family: var(--f-mono); }
+.cs-stamp-font { font-family: var(--f-stamp); }
+
+/* index card */
+.cs-card {
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  box-shadow: 1px 2px 0 rgba(0,0,0,0.06), 3px 5px 12px rgba(60,40,10,0.08);
+  position: relative;
+}
+.cs-card.lined {
+  background-image:
+    linear-gradient(var(--paper) 0, var(--paper) 28px, rgba(190,30,30,0.15) 28px, rgba(190,30,30,0.15) 29px, var(--paper) 29px),
+    repeating-linear-gradient(transparent 0 23px, rgba(100,140,180,0.22) 23px 24px);
+  padding-top: 8px;
+}
+
+/* big SOS button */
+.cs-sos {
+  width: 220px; height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #e25048 0%, #c8332c 45%, #9b251f 100%);
+  color: #fff;
+  border: 3px solid #6b1a15;
+  box-shadow:
+    inset 0 -10px 24px rgba(0,0,0,0.35),
+    inset 0 8px 18px rgba(255,255,255,0.18),
+    0 6px 0 #6b1a15,
+    0 10px 28px rgba(120,20,15,0.35);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-family: var(--f-stamp);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.1s, box-shadow 0.1s;
+  position: relative;
+}
+.cs-sos:active {
+  transform: translateY(4px);
+  box-shadow:
+    inset 0 -10px 24px rgba(0,0,0,0.35),
+    inset 0 8px 18px rgba(255,255,255,0.18),
+    0 2px 0 #6b1a15,
+    0 4px 12px rgba(120,20,15,0.35);
+}
+.cs-sos.active {
+  animation: cs-pulse 1.6s ease-in-out infinite;
+}
+@keyframes cs-pulse {
+  0%, 100% { box-shadow:
+    inset 0 -10px 24px rgba(0,0,0,0.35),
+    inset 0 8px 18px rgba(255,255,255,0.18),
+    0 6px 0 #6b1a15,
+    0 0 0 0 rgba(200,51,44,0.55),
+    0 10px 28px rgba(120,20,15,0.35); }
+  50% { box-shadow:
+    inset 0 -10px 24px rgba(0,0,0,0.35),
+    inset 0 8px 18px rgba(255,255,255,0.18),
+    0 6px 0 #6b1a15,
+    0 0 0 24px rgba(200,51,44,0),
+    0 10px 28px rgba(120,20,15,0.35); }
+}
+
+/* corner crosshair / registration marks */
+.cs-reg {
+  position: absolute; width: 14px; height: 14px;
+  border: 1px solid var(--ink);
+  opacity: 0.4;
+}
+.cs-reg::before, .cs-reg::after {
+  content: ""; position: absolute; background: var(--ink);
+}
+.cs-reg::before { left: 50%; top: -4px; bottom: -4px; width: 1px; transform: translateX(-50%); }
+.cs-reg::after  { top: 50%; left: -4px; right: -4px; height: 1px; transform: translateY(-50%); }
+.cs-reg.tl { top: 8px; left: 8px; }
+.cs-reg.tr { top: 8px; right: 8px; }
+.cs-reg.bl { bottom: 8px; left: 8px; }
+.cs-reg.br { bottom: 8px; right: 8px; }
+
+/* dashed cut line */
+.cs-dashed {
+  border-top: 1px dashed var(--line-strong);
+}
+
+/* tiny hole punch */
+.cs-hole {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--paper-3);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.35);
+}
+
+/* checkbox like form */
+.cs-check {
+  width: 14px; height: 14px;
+  border: 1.5px solid var(--ink);
+  display: inline-block;
+  position: relative;
+  flex: none;
+}
+.cs-check.checked::after {
+  content: "✕"; position: absolute;
+  left: 50%; top: 50%; transform: translate(-50%, -55%);
+  font-family: var(--f-stamp);
+  color: var(--marker-red);
+  font-size: 18px; line-height: 1;
+}
+
+/* progress dots */
+.cs-dots { display: inline-flex; gap: 3px; }.cs-dots span {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--pencil);
+  opacity: 0.3;
+  animation: cs-dot 1.2s infinite;
+}
+.cs-dots span:nth-child(2) { animation-delay: 0.15s; }
+.cs-dots span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes cs-dot {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+/* heartbeat ECG pulse — sync'd with .cs-sos.active (1.6s) */
+@keyframes hint-wiggle {
+  0%, 100% { transform: translateX(-50%) rotate(-1deg); }
+  50%      { transform: translateX(-50%) rotate(1.5deg); }
+}
+@keyframes hb-pulse {
+  0%   { opacity: 0;   transform: translateX(-6px) scale(0.92); }
+  18%  { opacity: 1;   transform: translateX(0)    scale(1.04); }
+  35%  { opacity: 0.85;transform: translateX(2px)  scale(1);    }
+  60%  { opacity: 0.35;transform: translateX(4px)  scale(0.98); }
+  100% { opacity: 0;   transform: translateX(8px)  scale(0.94); }
+}
+
+/* sheet header bar */
+.cs-header-bar {
+  background:
+    repeating-linear-gradient(45deg, var(--ink) 0 8px, transparent 8px 16px);
+  height: 10px;
+  opacity: 0.85;
+}
+
+/* hand-drawn underline */
+.cs-underline {
+  position: relative;
+  display: inline-block;
+}
+.cs-underline::after {
+  content: "";
+  position: absolute;
+  left: -2px; right: -2px; bottom: -3px;
+  height: 6px;
+  background: var(--highlight);
+  opacity: 0.55;
+  z-index: -1;
+  transform: rotate(-0.6deg);
+}
+
+/* button generic */
+.cs-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--f-body);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 9px 14px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+  border-radius: 2px;
+  box-shadow: 2px 2px 0 var(--ink);
+  cursor: pointer;
+  letter-spacing: 0.02em;
+}
+.cs-btn:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); }
+
+/* scrollbars */
+.cs-scroll::-webkit-scrollbar { width: 6px; }
+.cs-scroll::-webkit-scrollbar-thumb { background: var(--pencil-faint); border-radius: 0; }
+.cs-scroll::-webkit-scrollbar-track { background: transparent; }
