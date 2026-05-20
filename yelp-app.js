@@ -7,57 +7,161 @@ const DEFAULT_TWEAKS = /*EDITMODE-BEGIN*/{
   "skip_intro": false,
   "show_operator_pane": false,
   "low_load": false,
-  "accent": "#c8332c"
+  "accent": "#c8332c",
+  "speech_enabled": true,
+  "speech_muted": false,
+  "speech_dry_run": false
 }/*EDITMODE-END*/;
 
+// Conforms to yelp-agent-spec.md §3. This is the canonical Agent OUTPUT.
 const JSON_BLOB = `{
   "event_id": "evt_06420f",
-  "event_type": "flood",
-  "severity": 4,
-  "panic_level": 0.86,
-  "confidence": 0.72,
+  "timestamp": "2026-05-17T06:42:11+08:00",
+  "source_type": "voice_transcript",
+  "raw_input": "救命水一直進來我媽走不了快點快點",
   "location": {
     "lat": 23.4012,
     "lng": 121.3104,
-    "accuracy_m": 18,
-    "note": "low-lying riverside"
+    "raw_text": "low-lying riverside"
   },
-  "signals": {
-    "voice": true,
-    "voice_features": {
-      "rate_increase": true,
-      "tremor": true,
-      "repetition": 3
-    },
-    "text": true,
-    "gesture": false
+  "event_type": "flood",
+  "hazards": ["rising_water", "blocked_exit"],
+  "severity_level": 4,
+  "urgency_level": 5,
+  "panic_level": 0.86,
+  "confidence": 0.72,
+  "priority_score": 0.94,
+  "reporter_status": "unknown",
+  "people": {
+    "count": 2,
+    "vulnerable_flags": {
+      "elderly": false,
+      "child": false,
+      "mobility_issue": true,
+      "injured": false,
+      "alone": false
+    }
   },
-  "needs": ["rescue", "mobility_assistance"],
-  "vulnerability_flags": ["mobility_impaired"],
-  "exchange_targets": [
-    "rescue_dispatch",
-    "medical_support",
-    "shelter_accessibility",
-    "flood_hotspot_map"
-  ],
-  "recommended_actions": [
-    "dispatch_rescue_team",
-    "prepare_mobility_assistance",
-    "mark_as_high_priority"
-  ],
-  "source_evidence": [
-    "speaker repeatedly mentioned water entering the room",
-    "speech rate increased, pauses shortened",
-    "mention of family member who cannot walk"
-  ],
-  "raw_input_ref": "raw://evt_06420f/audio_01.wav",
-  "status": {
-    "created": true,
-    "sent": true,
-    "read": true,
-    "review_required": true
-  }
+  "needs": ["rescue", "evacuation"],
+  "evidence": {
+    "event_type": "水一直進來",
+    "severity_level": "水一直進來、快點快點",
+    "panic_level": "救命、快點快點、語句急促",
+    "needs": "我媽走不了"
+  },
+  "missing_information": ["exact_location", "injury_status", "reporter_self_status"],
+  "recommended_next_action": "優先確認定位並派送撤離支援"
 }`;
+
+const SPEECH_LINES = [
+  "\u5df2\u6536\u5230\u4f60\u7684\u8a0a\u865f\u3002",
+  "\u6b63\u5728\u50b3\u9001\u4f4d\u7f6e\u3002",
+  "\u6b63\u5728\u5206\u6790\u707d\u60c5\u3002",
+  "\u5df2\u5efa\u7acb\u707d\u60c5\u4e8b\u4ef6\u3002",
+  "\u5df2\u9001\u51fa\u6c42\u52a9\u8acb\u6c42\u3002",
+  "\u8acb\u4fdd\u6301\u5b89\u5168\uff0c\u7b49\u5f85\u56de\u61c9\u3002",
+];
+
+function useSpeechGuide({ enabled, muted, dryRun }) {
+  const supported = typeof window !== "undefined"
+    && "speechSynthesis" in window
+    && typeof window.SpeechSynthesisUtterance !== "undefined";
+  const spokenStepsRef = React.useRef({});
+  const [speechState, setSpeechState] = React.useState({
+    supported,
+    enabled,
+    muted,
+    dryRun,
+    speaking: false,
+    voiceName: "",
+    lastText: "",
+    lastStep: null,
+    lastMode: null,
+    error: "",
+    history: [],
+  });
+
+  React.useEffect(() => {
+    setSpeechState((s) => ({ ...s, supported, enabled, muted, dryRun }));
+  }, [supported, enabled, muted, dryRun]);
+
+  React.useEffect(() => {
+    if (!supported) return;
+    const syncVoice = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find((v) => /^zh[-_]TW$/i.test(v.lang))
+        || voices.find((v) => /^zh/i.test(v.lang))
+        || voices[0]
+        || null;
+      setSpeechState((s) => ({ ...s, voiceName: preferred ? preferred.name : s.voiceName }));
+    };
+    syncVoice();
+    window.speechSynthesis.addEventListener("voiceschanged", syncVoice);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", syncVoice);
+  }, [supported]);
+
+  const remember = React.useCallback((index, text, mode, error) => {
+    setSpeechState((s) => ({
+      ...s,
+      lastText: text,
+      lastStep: index,
+      lastMode: mode,
+      error: error || "",
+      history: [{ index, text, mode, at: new Date().toTimeString().slice(0, 8) }].concat(s.history).slice(0, 6),
+    }));
+  }, []);
+
+  const reset = React.useCallback(() => {
+    spokenStepsRef.current = {};
+    if (supported) {
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+    }
+    setSpeechState((s) => ({
+      ...s,
+      speaking: false,
+      lastText: "",
+      lastStep: null,
+      lastMode: null,
+      error: "",
+      history: [],
+    }));
+  }, [supported]);
+
+  const speakStep = React.useCallback((index) => {
+    const text = SPEECH_LINES[index] || "";
+    if (!text || spokenStepsRef.current[index]) return;
+    spokenStepsRef.current[index] = true;
+
+    if (!enabled) return remember(index, text, "disabled");
+    if (muted) return remember(index, text, "muted");
+    if (dryRun) return remember(index, text, "dry-run");
+    if (!supported) return remember(index, text, "unsupported", "SpeechSynthesis unavailable");
+
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+    const utter = new window.SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find((v) => /^zh[-_]TW$/i.test(v.lang))
+      || voices.find((v) => /^zh/i.test(v.lang))
+      || null;
+    if (preferred) utter.voice = preferred;
+    utter.lang = preferred && preferred.lang ? preferred.lang : "zh-TW";
+    utter.rate = 0.92;
+    utter.pitch = 1;
+    utter.volume = 1;
+    utter.onstart = () => {
+      setSpeechState((s) => ({ ...s, speaking: true, error: "", voiceName: preferred ? preferred.name : s.voiceName }));
+      remember(index, text, "spoken");
+    };
+    utter.onend = () => setSpeechState((s) => ({ ...s, speaking: false }));
+    utter.onerror = (ev) => {
+      setSpeechState((s) => ({ ...s, speaking: false, error: ev && ev.error ? ev.error : "speech error" }));
+      remember(index, text, "error", ev && ev.error ? ev.error : "speech error");
+    };
+    window.speechSynthesis.speak(utter);
+  }, [dryRun, enabled, muted, remember, supported]);
+
+  return { speechState, speakStep, reset };
+}
 
 function YelpApp() {
   const [t, setTweak] = useTweaks(DEFAULT_TWEAKS);
@@ -65,6 +169,20 @@ function YelpApp() {
   const [board, setBoard] = React.useState(t.skip_intro && t.auto_open_board ? "open" : "closed");
   const [jsonOpen, setJsonOpen] = React.useState(false);
   const lastTapRef = React.useRef(0);
+
+  // ── Agent state ──
+  // jsonStr: live JSON shown by all views. Starts as mock JSON_BLOB;
+  // replaced by real Agent output once OpenRouter returns successfully.
+  // agentState: { status: "idle" | "skipped" | "running" | "success" | "error",
+  //               reason?, error?, model?, elapsedMs?, usage? }
+  const [jsonStr,    setJsonStr]    = React.useState(JSON_BLOB);
+  const [agentState, setAgentState] = React.useState({ status: "idle" });
+  const agentAbortRef = React.useRef(null);
+  const speech = useSpeechGuide({
+    enabled: !!t.speech_enabled,
+    muted: !!t.speech_muted,
+    dryRun: !!t.speech_dry_run,
+  });
 
   // apply dark mode to body for css vars
   React.useEffect(() => {
@@ -87,8 +205,50 @@ function YelpApp() {
     dateStr: "2026-05-17 SAT",
     timeStr: "06:42:18 +08",
     createdAt: "06:42:11",
-    jsonStr: JSON_BLOB,
+    jsonStr,
+    agentState,
+    speechState: speech.speechState,
   };
+
+  // Fire Agent once when phase transitions to "active".
+  // Uses raw_input + source_type + location from the mock JSON_BLOB as input
+  // (in a real deployment these come from the captured audio/text/GPS).
+  React.useEffect(() => {
+    if (phase !== "active") return;
+    if (agentState.status !== "idle") return;
+    if (!window.YelpAgent) {
+      setAgentState({ status: "skipped", reason: "agent-not-loaded" });
+      return;
+    }
+    if (!window.YelpAgent.hasKey()) {
+      setAgentState({ status: "skipped", reason: "no-key" });
+      return;
+    }
+
+    let initial;
+    try { initial = JSON.parse(JSON_BLOB); }
+    catch (e) { setAgentState({ status: "error", error: "mock JSON_BLOB parse failed" }); return; }
+
+    const abort = new AbortController();
+    agentAbortRef.current = abort;
+    setAgentState({ status: "running" });
+
+    window.YelpAgent.runAgent({
+      rawInput:   initial.raw_input,
+      sourceType: initial.source_type,
+      eventId:    initial.event_id,
+      location:   initial.location,
+      signal:     abort.signal,
+    }).then(({ parsed, usage, model, elapsedMs }) => {
+      setJsonStr(JSON.stringify(parsed, null, 2));
+      setAgentState({ status: "success", usage, model, elapsedMs });
+    }).catch((err) => {
+      // AbortError happens on reset() — silent
+      if (err && err.name === "AbortError") return;
+      console.warn("[yelp-agent]", err);
+      setAgentState({ status: "error", error: err.message || String(err) });
+    });
+  }, [phase, agentState.status]);
 
   function press() {
     if (phase === "idle") {
@@ -115,9 +275,14 @@ function YelpApp() {
   }
 
   function reset() {
+    // abort any in-flight Agent call
+    if (agentAbortRef.current) { try { agentAbortRef.current.abort(); } catch (e) {} agentAbortRef.current = null; }
+    speech.reset();
     setBoard("closed");
     setJsonOpen(false);
     setPhase("idle");
+    setJsonStr(JSON_BLOB);
+    setAgentState({ status: "idle" });
   }
 
   return (
@@ -131,77 +296,87 @@ function YelpApp() {
     }}>
     <div style={{
       minHeight: "100vh",
-      minWidth: t.show_operator_pane ? 1180 : 520,
+      minWidth: t.show_operator_pane ? 1300 : 520,
       width: "max-content", margin: "0 auto",
       display: "flex", alignItems: "center", justifyContent: "center",
       gap: 22, padding: "32px 24px 60px",
       position: "relative",
     }}>
-      <StationBackdrop />
+      {!t.show_operator_pane && <StationBackdrop />}
       <RoleSwitcher
         role={t.show_operator_pane ? "responder" : "victim"}
         setRole={(r) => setTweak("show_operator_pane", r === "responder")}
         lowLoad={t.low_load}
         setLowLoad={(v) => setTweak("low_load", v)}
       />
-      {t.show_operator_pane && <OperatorPane t={t} ctx={ctx} phase={phase} reset={reset} />}
 
-      <div style={{ position: "relative", zIndex: 2 }}>
-        <IOSDevice width={402} height={874}>
-          <div style={{ height: "100%", position: "relative", background: "var(--paper)" }}>
-            <MainScreen
-              phase={phase}
-              onPress={press}
-              onOpenBoard={() => setBoard("open")}
-              t={ctx}
-              lowLoad={t.low_load}
-            />
-            {board === "open" && (
-              <CommandBoard
-                onClose={() => setBoard("closed")}
-                onOpenJson={() => setJsonOpen(true)}
+      {t.show_operator_pane ? (
+        <ResponderConsole ctx={ctx} phase={phase} reset={reset} jsonStr={jsonStr}>
+          <IOSDevice width={340} height={740}>
+            <div style={{ height: "100%", position: "relative", background: "var(--paper)" }}>
+              <MainScreen
+                phase={phase}
+                onPress={press}
+                onOpenBoard={() => setBoard("open")}
                 t={ctx}
-                showPlaceholders={true}
+                lowLoad={t.low_load}
+                readOnly
+                speechState={speech.speechState}
               />
-            )}
-          </div>
-        </IOSDevice>
+              {board === "open" && (
+                <CommandBoard
+                  onClose={() => setBoard("closed")}
+                  onOpenJson={() => setJsonOpen(true)}
+                  t={ctx}
+                  showPlaceholders={true}
+                />
+              )}
+            </div>
+          </IOSDevice>
+        </ResponderConsole>
+      ) : (
+        <div style={{ position: "relative", zIndex: 2 }}>
+          <IOSDevice width={402} height={874}>
+            <div style={{ height: "100%", position: "relative", background: "var(--paper)" }}>
+              <MainScreen
+                phase={phase}
+                onPress={press}
+                onOpenBoard={() => setBoard("open")}
+                t={ctx}
+                lowLoad={t.low_load}
+                speechState={speech.speechState}
+                onLifecycleSpeak={speech.speakStep}
+              />
+              {board === "open" && (
+                <CommandBoard
+                  onClose={() => setBoard("closed")}
+                  onOpenJson={() => setJsonOpen(true)}
+                  t={ctx}
+                  showPlaceholders={true}
+                />
+              )}
+            </div>
+          </IOSDevice>
 
-        {/* phone tape strips, holding it to the board (decorative) */}
-        {!t.low_load && (
-          <React.Fragment>
-            <div style={{
-              position: "absolute", top: -16, left: 60, width: 80, height: 26,
-              background: "rgba(244,216,110,0.85)",
-              transform: "rotate(-5deg)",
-              boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-            }} />
-            <div style={{
-              position: "absolute", top: -14, right: 50, width: 86, height: 24,
-              background: "rgba(160,196,222,0.8)",
-              transform: "rotate(6deg)",
-              boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
-            }} />
-          </React.Fragment>
-        )}
-
-        {/* caption tag below the phone — only meaningful when responder pane is visible */}
-        {t.show_operator_pane && !t.low_load && (
-          <div style={{
-            position: "absolute", bottom: -48, left: "50%", transform: "translateX(-50%) rotate(-1deg)",
-            background: "var(--paper)", border: "1px solid var(--ink)",
-            padding: "6px 14px",
-            fontFamily: "var(--f-stamp)", fontSize: 12, letterSpacing: 1, color: "var(--ink)",
-            boxShadow: "2px 2px 0 rgba(0,0,0,0.3)",
-            display: "flex", alignItems: "center", gap: 8,
-          }}>
-            <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--marker-red)" }} />
-            SUBJECT PHONE · YELP MVP
-          </div>
-        )}
-      </div>
-
-      {t.show_operator_pane && <ReportPane t={t} ctx={ctx} jsonStr={JSON_BLOB} />}
+          {/* phone tape strips, holding it to the board (decorative) */}
+          {!t.low_load && (
+            <React.Fragment>
+              <div style={{
+                position: "absolute", top: -16, left: 60, width: 80, height: 26,
+                background: "rgba(244,216,110,0.85)",
+                transform: "rotate(-5deg)",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+              }} />
+              <div style={{
+                position: "absolute", top: -14, right: 50, width: 86, height: 24,
+                background: "rgba(160,196,222,0.8)",
+                transform: "rotate(6deg)",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
+              }} />
+            </React.Fragment>
+          )}
+        </div>
+      )}
       </div>
 
       <TweaksPanel title="Tweaks">
@@ -217,6 +392,11 @@ function YelpApp() {
         </TweakSection>
         <TweakSection label="現場演示">
           <TweakButton label="重設 (回到 idle)" onClick={reset} />
+        </TweakSection>
+        <TweakSection label="Speech">
+          <TweakToggle label="Speech feedback" value={t.speech_enabled} onChange={(v) => setTweak("speech_enabled", v)} />
+          <TweakToggle label="Mute speech" value={t.speech_muted} onChange={(v) => setTweak("speech_muted", v)} />
+          <TweakToggle label="Dry-run only" value={t.speech_dry_run} onChange={(v) => setTweak("speech_dry_run", v)} />
         </TweakSection>
       </TweaksPanel>
 
@@ -360,265 +540,6 @@ function StationBackdrop() {
       }} />
     </React.Fragment>
   );
-}
-
-// ──────────────────────────────────────────────────────────
-// LEFT pane: incident log on plywood board
-// ──────────────────────────────────────────────────────────
-function OperatorPane({ t, ctx, phase, reset }) {
-  return (
-    <div style={{ position: "relative", zIndex: 2, width: 320, flexShrink: 0, alignSelf: "stretch", display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* header sign */}
-      <div className="cs-board" style={{ padding: "14px 16px", position: "relative" }}>
-        <div className="cs-stamp-font" style={{ fontSize: 20, color: "#3a2a14", letterSpacing: 1 }}>
-          現場指揮站 · FIELD OPS
-        </div>
-        <div className="cs-mono" style={{ fontSize: 10, color: "#5a4322", letterSpacing: 1, marginTop: 2 }}>
-          SECTOR&nbsp;C / TENT-04 · LISTENING POST
-        </div>
-        <div style={{ position: "absolute", top: -8, right: 18, transform: "rotate(8deg)" }}>
-          <Stamp color="#8a221c" rotate={0} style={{ background: "rgba(241,234,216,0.92)" }}>
-            17 MAY · 06:40
-          </Stamp>
-        </div>
-      </div>
-
-      {/* incident log */}
-      <div className="cs-card lined" style={{ padding: "12px 14px 14px", position: "relative", flex: 1, minHeight: 380 }}>
-        <Tape color="yellow" style={{ left: -10, top: -10, transform: "rotate(-8deg)" }} />
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
-          <span className="cs-stamp-font" style={{ fontSize: 15, color: "var(--ink)", letterSpacing: 0.5 }}>
-            INCOMING · 收訊紀錄
-          </span>
-          <span className="cs-mono" style={{ fontSize: 10, color: "var(--pencil)" }}>page 03 / 14</span>
-        </div>
-
-        <LogRow time="06:38:02" who="—"   text="(待命中…)" muted />
-        <LogRow time="06:42:11" who="evt_06420f" text="新事件建立 · 自手機 yelp" pin="red" />
-        <LogRow time="06:42:14" who="evt_06420f" text="位置送達 · 23.4012,121.3104" pin="blue" />
-        <LogRow time="06:42:14" who="evt_06420f" text='文字片段：「水一直進來」' />
-        <LogRow time="06:42:16" who="evt_06420f" text='語音片段：「我爸不能走，拜託快點」' />
-        <LogRow time="06:42:18" who="后端"  text="後端已讀；判讀 → flood / sev 4" pin="yellow" />
-        <LogRow time="06:42:19" who="agent" text="信心 0.72，已標記需複核" />
-        <LogRow time="06:42:21" who="dispatch" text="→ 推送 rescue_dispatch · medical_support" />
-
-        {/* margin notes */}
-        <div className="cs-hand" style={{
-          position: "absolute", right: 8, bottom: 26,
-          fontSize: 19, color: "var(--marker-red)",
-          transform: "rotate(-3deg)",
-        }}>
-          → 推派 R-12<br/>需擔架
-        </div>
-      </div>
-
-      {/* legend */}
-      <div className="cs-kraft" style={{ padding: "10px 12px", position: "relative" }}>
-        <div className="cs-mono" style={{ fontSize: 10, color: "#3a2a14", letterSpacing: 1, marginBottom: 6 }}>
-          LEGEND · 圖例
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 12, color: "#2c200e" }}>
-          <LegendItem c="#c8332c" l="紅 = 求助 / 高優先" />
-          <LegendItem c="#1b4a82" l="藍 = 位置 / 地圖" />
-          <LegendItem c="#b07b1f" l="黃 = 系統判讀" />
-          <LegendItem c="#4a7c45" l="綠 = 已確認" />
-        </div>
-      </div>
-
-      {/* button strip */}
-      <div style={{ display: "flex", gap: 8 }}>
-        <button className="cs-btn" onClick={reset} style={{ flex: 1 }}>
-          <span style={{ width: 10, height: 10, background: "var(--marker-red)", borderRadius: "50%" }} />
-          重播 / replay
-        </button>
-        <div className="cs-mono" style={{
-          flex: 1, padding: "9px 12px", background: "var(--paper-2)", border: "1.5px solid var(--ink)",
-          fontSize: 11, color: "var(--ink-soft)", letterSpacing: 1,
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-        }}>
-          phase: <b>{phase}</b>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LogRow({ time, who, text, pin, muted }) {
-  return (
-    <div style={{
-      display: "flex", gap: 6, alignItems: "flex-start", padding: "3px 0",
-      opacity: muted ? 0.5 : 1, position: "relative",
-    }}>
-      <span className="cs-mono" style={{ fontSize: 10, color: "var(--pencil)", width: 56, flex: "none", lineHeight: "22px" }}>
-        {time}
-      </span>
-      <span className="cs-mono" style={{ fontSize: 10, color: pin === "red" ? "var(--marker-red)" : "var(--ink-soft)", width: 68, flex: "none", fontWeight: 700, lineHeight: "22px" }}>
-        {who}
-      </span>
-      <span style={{ flex: 1, fontFamily: "var(--f-body)", fontSize: 13, color: "var(--ink)", lineHeight: "22px" }}>
-        {text}
-      </span>
-      {pin && <span style={{
-        flex: "none", width: 8, height: 8, marginTop: 6, borderRadius: "50%",
-        background: pin === "red" ? "var(--marker-red)" : pin === "blue" ? "#1b4a82" : pin === "yellow" ? "var(--highlight-dim)" : "var(--ok)",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.3), inset 0 -1px 1px rgba(0,0,0,0.3)",
-      }} />}
-    </div>
-  );
-}
-
-function LegendItem({ c, l }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <span style={{ width: 10, height: 10, background: c, borderRadius: "50%", flex: "none", boxShadow: "inset 0 -1px 1px rgba(0,0,0,0.3)" }} />
-      <span>{l}</span>
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────
-// RIGHT pane: dispatch board with task strips + JSON slip
-// ──────────────────────────────────────────────────────────
-function ReportPane({ t, ctx, jsonStr }) {
-  return (
-    <div style={{ position: "relative", zIndex: 2, width: 340, flexShrink: 0, alignSelf: "stretch", display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* board sign */}
-      <div className="cs-board" style={{ padding: "14px 16px", position: "relative" }}>
-        <div className="cs-stamp-font" style={{ fontSize: 20, color: "#3a2a14", letterSpacing: 1 }}>
-          派遣板 · DISPATCH
-        </div>
-        <div className="cs-mono" style={{ fontSize: 10, color: "#5a4322", letterSpacing: 1, marginTop: 2 }}>
-          任務分流 · TASK STRIPS · 已自 JSON 轉派
-        </div>
-      </div>
-
-      {/* task strips */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <TaskStrip
-          tag="RESCUE" color="var(--marker-red)"
-          title="派遣救援 R-12"
-          meta="rescue_dispatch · sev 4"
-          state="ok"
-          stateLabel="已派出"
-          note="座標 23.4012, 121.3104" />
-        <TaskStrip
-          tag="MEDICAL" color="#1b4a82"
-          title="準備行動協助"
-          meta="medical_support · 行動不便"
-          state="sent"
-          stateLabel="已通知"
-          note="擔架 / 輪椅" />
-        <TaskStrip
-          tag="MAP" color="#b07b1f"
-          title="淹水熱區標記"
-          meta="flood_hotspot_map"
-          state="read"
-          stateLabel="已標記"
-          note="GIS 已收" />
-        <TaskStrip
-          tag="REVIEW" color="var(--pencil)"
-          title="人工複核"
-          meta="confidence 0.72"
-          state="warn"
-          stateLabel="待複核"
-          note="若可，追問是否其他人受困" />
-      </div>
-
-      {/* mini JSON receipt */}
-      <div style={{ position: "relative", marginTop: 4 }}>
-        <Tape color="red" style={{ right: 30, top: -10, transform: "rotate(6deg)" }} />
-        <div style={{
-          background: "var(--paper-2)",
-          border: "1.5px solid var(--ink)",
-          padding: "10px 12px",
-          position: "relative",
-        }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-            <div className="cs-stamp-font" style={{ fontSize: 13, letterSpacing: 1 }}>EXCHANGE PAYLOAD</div>
-            <div className="cs-mono" style={{ fontSize: 10, color: "var(--pencil)" }}>application/json</div>
-          </div>
-          <div className="cs-mono" style={{ fontSize: 10, color: "var(--pencil)", marginTop: 2 }}>
-            ↓ 給後續積木使用 · 任一系統可接
-          </div>
-          <pre className="cs-mono" style={{
-            margin: "8px 0 0",
-            fontSize: 10, lineHeight: 1.5,
-            color: "var(--ink)",
-            maxHeight: 220, overflow: "auto",
-            whiteSpace: "pre-wrap", wordBreak: "break-all",
-            background: "var(--paper)",
-            padding: "8px 10px",
-            border: "1px dashed var(--line-strong)",
-          }}>{trimJson(jsonStr)}</pre>
-          <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <Chip mono>rescue_dispatch</Chip>
-            <Chip mono>medical_support</Chip>
-            <Chip mono>shelter_accessibility</Chip>
-            <Chip mono>flood_hotspot_map</Chip>
-          </div>
-        </div>
-      </div>
-
-      {/* footer stamp row */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-        <Stamp color="var(--ok)" rotate={-4} style={{ fontSize: 10 }}>已送出</Stamp>
-        <Stamp color="#1b4a82" rotate={3} style={{ fontSize: 10 }}>已讀</Stamp>
-        <Stamp color="var(--warn)" rotate={-2} style={{ fontSize: 10 }}>需複核</Stamp>
-        <div className="cs-mono" style={{ marginLeft: "auto", fontSize: 10, color: "var(--paper)" }}>seq 014</div>
-      </div>
-    </div>
-  );
-}
-
-function TaskStrip({ tag, color, title, meta, state, stateLabel, note }) {
-  return (
-    <div style={{
-      display: "flex", alignItems: "stretch",
-      background: "var(--paper)", border: "1.5px solid var(--ink)",
-      boxShadow: "2px 3px 0 rgba(0,0,0,0.18)",
-      position: "relative",
-    }}>
-      {/* color flag */}
-      <div style={{
-        width: 22, background: color,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        borderRight: "1.5px solid var(--ink)",
-      }}>
-        <span style={{
-          color: "#fff", fontFamily: "var(--f-stamp)", fontSize: 9, letterSpacing: 1,
-          writingMode: "vertical-rl", transform: "rotate(180deg)", padding: "4px 0",
-        }}>{tag}</span>
-      </div>
-      <div style={{ flex: 1, padding: "8px 10px 8px 12px" }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-          <span style={{ fontFamily: "var(--f-body)", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>{title}</span>
-          <Sticker kind={state} style={{ flex: "none" }}>{stateLabel}</Sticker>
-        </div>
-        <div className="cs-mono" style={{ fontSize: 10, color: "var(--pencil)", marginTop: 2 }}>{meta}</div>
-        <div className="cs-hand" style={{ fontSize: 16, color: color, marginTop: 3 }}>{note}</div>
-      </div>
-    </div>
-  );
-}
-
-function trimJson(s) {
-  // pull out a short, readable subset
-  return [
-    '{',
-    '  "event_type": "flood",',
-    '  "severity": 4,',
-    '  "panic_level": 0.86,',
-    '  "confidence": 0.72,',
-    '  "location": {"lat": 23.4012, "lng": 121.3104},',
-    '  "needs": ["rescue", "mobility_assistance"],',
-    '  "vulnerability_flags": ["mobility_impaired"],',
-    '  "exchange_targets": [',
-    '    "rescue_dispatch", "medical_support",',
-    '    "shelter_accessibility", "flood_hotspot_map"',
-    '  ],',
-    '  "status": {"created": true, "sent": true, "read": true}',
-    '}',
-  ].join('\n');
 }
 
 // fade-up keyframes available globally
