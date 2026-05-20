@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "states": [
+    "idle",
+    "running-right",
+    "running-left",
+    "waving",
+    "jumping",
+    "failed",
+    "waiting",
+    "running",
+    "review"
+  ],
+  "usedCounts": {
+    "idle": 6,
+    "running-right": 8,
+    "running-left": 8,
+    "waving": 4,
+    "jumping": 5,
+    "failed": 8,
+    "waiting": 6,
+    "running": 6,
+    "review": 6
+  },
+  "notes": "Generated from the Mood Mochi base art with deterministic pose transforms; unused atlas cells are transparent."
+}
